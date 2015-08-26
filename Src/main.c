@@ -39,16 +39,21 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc3;
+DMA_HandleTypeDef hdma_adc3;
 
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-#define MAX_mV 2900
+#define TIM_Period 5555 /* for 10KHz PWM frequency. See : http://stm32f4-discovery.com/2014/05/stm32f4-stm32f429-discovery-pwm-tutorial/ */
+#define INI_PULSE_LENGTH 1388 /* (((TIM_Period + 1) * DutyCycle / 100 - 1  ) Start with a 25% duty cycle*/
+#define MAX_ADC_VAL 0x0FFF
+__IO uint32_t adc_dma_val = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_TIM4_Init(void);
 
@@ -77,18 +82,20 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC3_Init();
   MX_TIM4_Init();
 
   /* USER CODE BEGIN 2 */
+	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t*)&adc_dma_val, 1) != HAL_OK)
+	{
+		HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
+	}
 	if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2) != HAL_OK)
 	{
 		HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
 	}
 	
-	TIM_OC_InitTypeDef sConfigOC;
-	uint32_t p = 1799;
-	uint32_t conval, prescale;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -98,29 +105,7 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
-		HAL_ADC_Start(&hadc3);
-		HAL_ADC_PollForConversion(&hadc3, 1000);
-		conval = HAL_ADC_GetValue(&hadc3);
-		HAL_ADC_Stop(&hadc3);
- 		prescale = map(conval, 0, 0x0FFF, 0, 100);
-		if (HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2)!= HAL_OK)
-		{
-			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
-		}
-		sConfigOC.OCMode = TIM_OCMODE_PWM1;
-		sConfigOC.Pulse = p;
-		sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-		sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-		if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2)!= HAL_OK)
-		{
-			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
-		}
-		if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2)!= HAL_OK)
-		{
-			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
-		}
-		p = prescale?((7199 + 1) * prescale) / 100 - 1 : 0;
-		HAL_Delay(100);
+ 		
 	}
   /* USER CODE END 3 */
 
@@ -179,7 +164,7 @@ void MX_ADC3_Init(void)
   hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc3.Init.NbrOfConversion = 1;
-  hadc3.Init.DMAContinuousRequests = DISABLE;
+  hadc3.Init.DMAContinuousRequests = ENABLE;
   hadc3.Init.EOCSelection = EOC_SINGLE_CONV;
   HAL_ADC_Init(&hadc3);
 
@@ -202,7 +187,7 @@ void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 0;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 7199;
+  htim4.Init.Period = 5555;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   HAL_TIM_PWM_Init(&htim4);
 
@@ -211,10 +196,24 @@ void MX_TIM4_Init(void)
   HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig);
 
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 1799;
+  sConfigOC.Pulse = 1388;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
   HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2);
+
+}
+
+/** 
+  * Enable DMA controller clock
+  */
+void MX_DMA_Init(void) 
+{
+  /* DMA controller clock enable */
+  __DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
 
@@ -519,9 +518,25 @@ void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-static int32_t map(int32_t x, int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max)
+static inline int32_t map(int32_t x, int32_t in_min, int32_t in_max, int32_t out_min, int32_t out_max)
 {
 	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+	/* Change the PWM */
+	static TIM_OC_InitTypeDef sConfigOC;
+	static uint32_t p = INI_PULSE_LENGTH;
+	uint32_t duty_cycle = map(adc_dma_val, 0, MAX_ADC_VAL, 0, 100);
+	p = duty_cycle?((TIM_Period + 1) * duty_cycle) / 100 - 1 : 0;
+	HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
+	sConfigOC.OCMode = TIM_OCMODE_PWM1;
+	sConfigOC.Pulse = p;
+	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+	HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
 }
 /* USER CODE END 4 */
 
