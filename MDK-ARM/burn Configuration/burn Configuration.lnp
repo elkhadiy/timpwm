@@ -19,6 +19,7 @@
 "burn configuration\stm32f4xx_hal_tim_ex.o"
 "burn configuration\stm32f4xx_hal_adc_ex.o"
 "burn configuration\stm32f4xx_hal_adc.o"
+"burn configuration\stm32f4xx_hal_spi.o"
 "burn configuration\startup_stm32f429xx.o"
 --library_type=microlib --strict --scatter "burn Configuration\burn Configuration.sct"
 --diag_suppress=L6329 --summary_stderr --info summarysizes --map --xref --callgraph --symbols

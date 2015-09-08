@@ -27,5 +27,6 @@ burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm3
 burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_flash_ramfunc.h
 burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr.h
 burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pwr_ex.h
+burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_spi.h
 burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_tim.h
 burn configuration\stm32f4xx_hal_adc.o: ..\Drivers\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_tim_ex.h

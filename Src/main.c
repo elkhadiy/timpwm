@@ -41,6 +41,8 @@
 ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc3;
 
+SPI_HandleTypeDef hspi3;
+
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
@@ -55,6 +57,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC3_Init(void);
+static void MX_SPI3_Init(void);
 static void MX_TIM4_Init(void);
 
 /* USER CODE BEGIN PFP */
@@ -62,6 +65,12 @@ static int32_t map(int32_t x, int32_t in_min, int32_t in_max, int32_t out_min, i
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+
+void LE()
+{
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+}
 
 /* USER CODE END 0 */
 
@@ -84,17 +93,24 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_ADC3_Init();
+  MX_SPI3_Init();
   MX_TIM4_Init();
 
   /* USER CODE BEGIN 2 */
-	if (HAL_ADC_Start_DMA(&hadc3, (uint32_t*)&adc_dma_val, 1) != HAL_OK)
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+	
+	/*if (HAL_ADC_Start_DMA(&hadc3, (uint32_t*)&adc_dma_val, 1) != HAL_OK)
 	{
 		HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
-	}
+	}*/
 	if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2) != HAL_OK)
 	{
 		HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
 	}
+	
+	TIM_OC_InitTypeDef sConfigOC;
+	uint32_t p = 1799;
+	uint32_t conval, prescale;
 	
   /* USER CODE END 2 */
 
@@ -105,7 +121,45 @@ int main(void)
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
- 		
+		
+		uint16_t reset = 0x0000;
+		uint16_t data[2] = {0x001F, 0x0001};
+		HAL_SPI_Transmit(&hspi3, (uint8_t*)data, 2, 1000);
+		LE();
+		HAL_SPI_Transmit(&hspi3, (uint8_t*)&reset, 1, 1000);
+		LE();
+		//HAL_Delay(2);
+		data[0] = 0x01E0;
+		data[1] = 0x0002;
+		HAL_SPI_Transmit(&hspi3, (uint8_t*)data, 2, 1000);
+		LE();
+		HAL_SPI_Transmit(&hspi3, (uint8_t*)&reset, 1, 1000);
+		LE();
+		//HAL_Delay(2);
+		
+			HAL_ADC_Start(&hadc3);
+		HAL_ADC_PollForConversion(&hadc3, 1000);
+		conval = HAL_ADC_GetValue(&hadc3);
+		HAL_ADC_Stop(&hadc3);
+ 		prescale = map(conval, 0, 0x0FFF, 0, 100);
+		if (HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2)!= HAL_OK)
+		{
+			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
+		}
+		sConfigOC.OCMode = TIM_OCMODE_PWM1;
+		sConfigOC.Pulse = p;
+		sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+		sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+		if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2)!= HAL_OK)
+		{
+			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
+		}
+		if (HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2)!= HAL_OK)
+		{
+			HAL_GPIO_WritePin(GPIOG, GPIO_PIN_14, GPIO_PIN_SET);
+		}
+		p = prescale?((7199 + 1) * prescale) / 100 - 1 : 0;
+
 	}
   /* USER CODE END 3 */
 
@@ -156,7 +210,7 @@ void MX_ADC3_Init(void)
     /**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion) 
     */
   hadc3.Instance = ADC3;
-  hadc3.Init.ClockPrescaler = ADC_CLOCKPRESCALER_PCLK_DIV4;
+  hadc3.Init.ClockPrescaler = ADC_CLOCKPRESCALER_PCLK_DIV8;
   hadc3.Init.Resolution = ADC_RESOLUTION12b;
   hadc3.Init.ScanConvMode = DISABLE;
   hadc3.Init.ContinuousConvMode = ENABLE;
@@ -174,6 +228,26 @@ void MX_ADC3_Init(void)
   sConfig.Rank = 1;
   sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
   HAL_ADC_ConfigChannel(&hadc3, &sConfig);
+
+}
+
+/* SPI3 init function */
+void MX_SPI3_Init(void)
+{
+
+  hspi3.Instance = SPI3;
+  hspi3.Init.Mode = SPI_MODE_MASTER;
+  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi3.Init.DataSize = SPI_DATASIZE_16BIT;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi3.Init.NSS = SPI_NSS_SOFT;
+  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi3.Init.TIMode = SPI_TIMODE_DISABLED;
+  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
+  hspi3.Init.CRCPolynomial = 10;
+  HAL_SPI_Init(&hspi3);
 
 }
 
@@ -335,8 +409,8 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF12_FMC;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC1 PC2 PC4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_4;
+  /*Configure GPIO pins : PC1 PC2 PC4 PC11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_4|GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
@@ -533,7 +607,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 	HAL_TIM_PWM_Stop(&htim4, TIM_CHANNEL_2);
 	sConfigOC.OCMode = TIM_OCMODE_PWM1;
 	sConfigOC.Pulse = p;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+	sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
 	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
 	HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
